@@ -1,0 +1,12 @@
+{
+  "patient_id": "HMS-DEBUG-001",
+  "clinical_summary": "72-year-old female presenting with progressive memory impairment and spatial disorientation. Patient has a family history of early-onset neurodegeneration. Brain MRI shows hippocampal atrophy.",
+  "diagnostics": {
+    "icd_10": "G30.9",
+    "status": "Presumptive Alzheimer's"
+  },
+  "biomarkers": {
+    "amyloid_beta": "Positive",
+    "tau": "Elevated"
+  }
+}
