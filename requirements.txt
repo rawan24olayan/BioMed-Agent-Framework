@@ -1,15 +1,17 @@
-# Core AI & Deep Learning
-torch>=2.0.0
-numpy>=1.24.0
+# --- Core Data & Bioinformatics ---
+numpy>=1.26.0
+pandas>=2.1.0
+scanpy>=1.9.6          # Industry standard for scRNA-seq
+anndata>=0.10.3        # Memory-efficient multi-omics storage
+biopython==1.81        # Stable version for Entrez API
 
-# NLP & Medical Text
-spacy>=3.5.0
-https://github.com/explosion/spacy-models/releases/download/en_core_sci_sm-0.5.1/en_core_sci_sm-0.5.1.tar.gz
+# --- Clinical NLP & AI Frameworks ---
+spacy>=3.7.2           # Modern NLP engine
+scispacy==0.5.4        # Biomedical models (Must match spacy version)
+langchain>=0.1.0       # LLM Orchestration
+langgraph>=0.0.20      # State-machine based AI agents
+openai>=1.10.0         # Latest API interface
 
-# Agentic Framework
-langchain>=0.1.0
-langgraph>=0.0.20
-
-# Data & API
-pandas>=2.0.0
-requests>=2.31.0
+# --- Testing & Infrastructure ---
+pytest>=7.4.0          # For our EHR parser validation
+python-dotenv>=1.0.0   # For secure API key management
