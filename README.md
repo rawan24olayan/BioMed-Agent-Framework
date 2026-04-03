@@ -13,8 +13,8 @@ This framework is an end-to-end pipeline designed to bridge the gap between high
 ## **Directory Structure**
 - `data/`: Ingestion layer for Omics, PubMed abstracts, and mock EHR.
 - `src/ingestion/`: NLP-driven parsers for clinical texts (SciSpacy).
-- `src/agent/`: The reasoning core; orchestrating autonomous LLM research loops.
-- `notebooks/`: Tutorials for stakeholders and clinical researchers.
+- `src/analysis/`: Logic for cross-referencing molecular and clinical data.
+- `src/agents/`: The reasoning core; orchestrating autonomous LLM research loops.
 
 ## **Tech Stack**
 - **AI/ML:** PyTorch, SciSpacy, LangGraph, LangChain.
