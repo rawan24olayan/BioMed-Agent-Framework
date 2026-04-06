@@ -1,0 +1,16 @@
+# Secrets (CRITICAL: Never push these)
+.env
+
+# Python Environment
+.venv/
+__pycache__/
+*.py[cod]
+
+# Research Data (Keep your raw matrices and reports private)
+data/
+*.csv
+*.json
+*.txt
+
+# VS Code settings
+.vscode/

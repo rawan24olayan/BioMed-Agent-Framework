@@ -1,81 +1,82 @@
+import time
 import os
 import json
-import sys
-from datetime import datetime
+from pathlib import Path
+from dotenv import load_dotenv
+import google.generativeai as genai
 
-# Ensure we can import from project root
-sys.path.append(os.getcwd())
+# 1. SETUP: Robust path finding for the .env file
+# This works whether you run from the root or inside src/agents/
+current_dir = Path(__file__).resolve().parent
+env_path = current_dir / '.env'
+load_dotenv(dotenv_path=env_path)
 
 class BioMedAgent:
-    """
-    Autonomous Agent that synthesizes Clinical, Molecular, and Literature 
-    insights into a structured Medical Memo.
-    """
-    def __init__(self, discovery_path="data/reports/latest_discovery.json"):
-        self.discovery_path = discovery_path
-        self.corpus_dir = "data/medical_corpus/"
-        self.report_dir = "data/reports/"
-
-    def load_discovery_data(self):
-        if not os.path.exists(self.discovery_path):
-            print(f"❌ Error: Discovery file {self.discovery_path} not found.")
-            return None
-        with open(self.discovery_path, "r") as f:
-            return json.load(f)
-
-    def generate_memo(self):
-        data = self.load_discovery_data()
-        if not data: return
-
-        diagnosis = data.get("diagnosis", "Unknown Condition")
-        findings = data.get("findings", [])
-
-        # Create the header
-        memo = f"============================================================\n"
-        memo += f"🤖 BIOMEDICAL AGENT: CLINICAL HYPOTHESIS MEMO\n"
-        memo += f"REPORT GENERATED: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
-        memo += f"============================================================\n\n"
+    def __init__(self):
+        # 2. CREDENTIALS: Load the key from the environment
+        api_key = os.getenv("GOOGLE_API_KEY")
         
-        memo += f"SUBJECT: Molecular Profile Correlation for {diagnosis}\n\n"
+        if not api_key:
+            print(f"❌ ERROR: GOOGLE_API_KEY not found in {env_path}")
+            return
+
+        # 3. CONFIGURATION: Using Gemini 2.0 Flash for 2026 standards
+        genai.configure(api_key=api_key)
+        self.model = genai.GenerativeModel('gemini-2.0-flash')
         
-        memo += "EXECUTIVE SUMMARY:\n"
-        memo += f"The system has analyzed the patient's single-cell transcriptomics \n"
-        memo += f"against the provided clinical diagnosis and current literature.\n\n"
+        # 4. PATHS: Points to your data folders (adjusting for src/agents location)
+        self.discovery_path = current_dir.parent.parent / "data/reports/latest_discovery.json"
+        self.report_path = current_dir.parent.parent / "data/reports/ai_reasoning_memo.txt"
 
-        memo += "KEY FINDINGS:\n"
-        for f in findings:
-            gene = f['gene']
-            expr = f['mean_expression']
-            sources = f['sources']
-            
-            memo += f"• BIOMARKER: {gene}\n"
-            memo += f"  - Expression Level: {expr} (Mean log-normalized)\n"
-            
-            if sources:
-                memo += f"  - Evidence Status: ✅ VALIDATED in {len(sources)} source(s)\n"
-                memo += f"  - Primary Source: {sources[0]}\n"
-            else:
-                memo += f"  - Evidence Status: ⚠️ NO DIRECT MATCH in local corpus\n"
-            memo += "\n"
+    def load_genomic_data(self):
+        """Reads the gene expression results from your pipeline."""
+        if os.path.exists(self.discovery_path):
+            with open(self.discovery_path, 'r') as f:
+                return json.load(f)
+        return None
 
-        memo += "REASONING & NEXT STEPS:\n"
-        validated_genes = [f['gene'] for f in findings if f['sources']]
-        if validated_genes:
-            memo += f"The significant activity of {', '.join(validated_genes)} \n"
-            memo += "suggests a high correlation with established literature for this condition.\n"
-            memo += "Recommended Action: Review pathway-specific inhibitors in clinical trials.\n"
-        else:
-            memo += "No direct literature correlation found. Recommend broader PubMed mining.\n"
+    def synthesize_reasoning(self, discovery_data):
+        """Sends biological context to Gemini to generate a clinical memo."""
+        gene = discovery_data.get("gene", "Unknown")
+        condition = discovery_data.get("condition", "Unknown")
+        
+        prompt = f"""
+        Role: Bioinformatics Research Lead
+        Task: Analyze the connection between GENE: {gene} and CONDITION: {condition}.
+        
+        Provide a concise clinical reasoning memo explaining the potential 
+        mechanism of action and significance in a disease-state manifold.
+        """
+        
+        print(f"🧬 [INFO] Gemini is analyzing {gene} for {condition}...")
+        
+        # RATE LIMIT PROTECTION: Sleep for 2 seconds before the API call
+        time.sleep(2) 
+        
+        try:
+            response = self.model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            return f"❌ AI Analysis failed: {str(e)}"
 
-        # Print to console
-        print(memo)
+    def run(self):
+        """Execute the agent logic."""
+        data = self.load_genomic_data()
+        if not data:
+            print(f"⚠️ No data found at {self.discovery_path}. Check your pipeline.")
+            return
 
-        # Save to file
-        output_path = os.path.join(self.report_dir, "clinical_memo.txt")
-        with open(output_path, "w") as out:
-            out.write(memo)
-        print(f"✅ FINAL MEMO SAVED TO: {output_path}")
+        # Generate the AI reasoning
+        reasoning = self.synthesize_reasoning(data)
+
+        # Save the final report
+        os.makedirs(os.path.dirname(self.report_path), exist_ok=True)
+        with open(self.report_path, 'w') as f:
+            f.write(reasoning)
+        
+        print(f"✅ Success! Memo saved to: {self.report_path}")
 
 if __name__ == "__main__":
     agent = BioMedAgent()
-    agent.generate_memo()
+    if hasattr(agent, 'model'):
+        agent.run()
