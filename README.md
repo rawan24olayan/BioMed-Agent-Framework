@@ -20,3 +20,9 @@ This framework is an end-to-end pipeline designed to bridge the gap between high
 - **AI/ML:** PyTorch, SciSpacy, LangGraph, LangChain.
 - **Informatics:** Scanpy, AnnData, GraphQL (Open Targets API).
 - **Infrastructure:** Modular Python architecture designed for HPC environments.
+
+## BioMed-Agent-Framework
+This framework utilizes an **Agentic Critique & Refine loop** to generate clinical reasoning memos.
+- **Model:** Gemini 2.5 Flash-Lite (Optimized for high-frequency reasoning)
+- **Architecture:** 3-Phase synthesis (Drafting -> Peer Review -> Finalization)
+- **Resilience:** Built-in exponential backoff for API quota management.
