@@ -4,103 +4,122 @@ import time
 from pathlib import Path
 from dotenv import load_dotenv
 import google.generativeai as genai
+from Bio import Entrez  # pip install biopython
 
-# Setup paths relative to this file to avoid issues running from the root
+# Locate the environment file to manage API keys securely
 current_dir = Path(__file__).resolve().parent
 env_path = current_dir / '.env'
 load_dotenv(dotenv_path=env_path)
 
 class BioMedAgent:
     def __init__(self):
-        # We need the key from the .env to talk to Gemini
+        # We need the Google key for the LLM and an email for the PubMed API
         api_key = os.getenv("GOOGLE_API_KEY")
+        Entrez.email = os.getenv("EMAIL_ADDRESS", "researcher@example.com")
+        
         if not api_key:
-            print(f"Missing API key in {env_path}")
+            print("Configuration Error: GOOGLE_API_KEY not found.")
             return
 
-        # Switching to flash-lite to keep the quota happy while developing
+        # Using 2.5-flash-lite to maximize our request quota
         genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel('gemini-2.5-flash-lite')
         
-        # Mapping out where our data lives
+        # Mapping the file structure for the R-to-Python pipeline
         project_root = current_dir.parent.parent
         self.discovery_path = project_root / "data" / "reports" / "latest_discovery.json"
         self.report_path = project_root / "data" / "reports" / "ai_reasoning_memo.txt"
 
-    def load_genomic_data(self):
-        """Grabs the JSON output from the R pipeline."""
-        if self.discovery_path.exists():
-            with open(self.discovery_path, 'r') as f:
-                return json.load(f)
-        return None
+    def fetch_literature_context(self, gene, condition):
+        """
+        Queries PubMed to find the most recent evidence. 
+        This prevents the model from relying solely on its training data.
+        """
+        try:
+            search_query = f"{gene} AND {condition}"
+            handle = Entrez.esearch(db="pubmed", term=search_query, retmax=3)
+            record = Entrez.read(handle)
+            handle.close()
+
+            if not record["IdList"]:
+                return "No specific literature found on PubMed."
+
+            summary_handle = Entrez.esummary(db="pubmed", id=",".join(record["IdList"]))
+            summaries = Entrez.read(summary_handle)
+            summary_handle.close()
+
+            return " | ".join([s['Title'] for s in summaries])
+        except Exception:
+            return "Literature search currently unavailable."
 
     def safe_generate(self, prompt):
         """
-        Wrapping the API call to handle rate limits gracefully.
-        Free tier is picky, so we'll wait a bit if we hit a wall.
+        Manages the digital handshake with the LLM. 
+        Includes a cooldown to respect the free tier rate limits.
         """
         try:
             time.sleep(2) 
             response = self.model.generate_content(prompt)
             return response.text
         except Exception as e:
-            if "429" in str(e) or "quota" in str(e).lower():
-                print("Quota limit reached. Taking a 15s breather...")
+            if "429" in str(e).lower():
+                print("Quota limit reached. Pausing for 15 seconds...")
                 time.sleep(15)
                 return self.model.generate_content(prompt).text
-            print(f"API Error: {e}")
-            return "Generation failed."
+            return f"Error: {e}"
 
     def synthesize_reasoning(self, discovery_data):
         """
-        Runs a multi-step check to catch hallucinations before saving.
-        First we draft, then we review, then we clean it up.
+        The core engine. It bridges the R-stats with live research 
+        and performs a self-critique to minimize hallucinations.
         """
         gene = discovery_data.get("gene", "Unknown")
         condition = discovery_data.get("condition", "Unknown")
         jaccard = discovery_data.get("jaccard_score", "N/A")
-        p_val = discovery_data.get("p_value", "N/A")
         
-        # Phase 1: The initial take on the data
+        # Step 1: Gather context
         print(f"🧬 Analyzing {gene} for {condition}...")
+        papers = self.fetch_literature_context(gene, condition)
+        
+        # Phase 1: The initial draft
         draft_prompt = (
-            f"Write a clinical memo for {gene} in {condition}. "
-            f"Statistical context: Jaccard={jaccard}, p-value={p_val}."
+            f"Draft a clinical memo for {gene} in {condition}. "
+            f"Evidence: Jaccard overlap={jaccard}. "
+            f"Recent Titles: {papers}"
         )
-        initial_draft = self.safe_generate(draft_prompt)
+        draft = self.safe_generate(draft_prompt)
         
-        # Phase 2: Double-checking for scientific nonsense
-        print("🔍 Reviewing for technical accuracy...")
-        critique_prompt = f"Review this for biological errors or missing context: {initial_draft}"
-        critique = self.safe_generate(critique_prompt)
+        # Phase 2: The peer-review check
+        print("🔍 Reviewing for scientific consistency...")
+        critique = self.safe_generate(f"Critique this memo for biological errors: {draft}")
         
-        # Phase 3: Merging the draft and the feedback
-        print("🖋️ Finalizing report...")
+        # Phase 3: The final refinement
+        print("🖋️ Finalizing reasoning memo...")
         final_prompt = (
-            f"Refine this draft: {initial_draft} \n\n"
-            f"Based on this critique: {critique} \n\n"
-            "Make sure the final version is polished and biologically sound."
+            f"Original: {draft}\nFeedback: {critique}\n"
+            "Produce a final version that incorporates the feedback and is ready for clinical review."
         )
         final_memo = self.safe_generate(final_prompt)
         
-        return initial_draft, critique, final_memo
+        return final_memo
 
     def run(self):
-        """Main entry point to process the data and save the result."""
-        data = self.load_genomic_data()
-        if not data:
-            print(f"No data found at {self.discovery_path}")
+        """Orchestrates the data loading, processing, and saving."""
+        if not self.discovery_path.exists():
+            print(f"Data source missing: {self.discovery_path}")
             return
 
-        draft, critique, final = self.synthesize_reasoning(data)
+        with open(self.discovery_path, 'r') as f:
+            data = json.load(f)
 
-        # Ensure the output folder exists before writing
+        memo = self.synthesize_reasoning(data)
+
+        # Write the final result to the report folder
         os.makedirs(self.report_path.parent, exist_ok=True)
         with open(self.report_path, 'w') as f:
-            f.write(final)
+            f.write(memo)
         
-        print(f"✅ Success! Report saved to {self.report_path.name}")
-        return draft, critique, final
+        print(f"✅ Process Complete. Results saved to {self.report_path.name}")
 
 if __name__ == "__main__":
     agent = BioMedAgent()
